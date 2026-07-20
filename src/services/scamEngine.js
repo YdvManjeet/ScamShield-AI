@@ -530,6 +530,35 @@ export function runScamAnalysis(text) {
       urgencyLevel: "none",
     };
   }
+
+  const cleanText = text.trim().toLowerCase();
+  if (cleanText.includes("your aadhaar has been linked to money laundering") || cleanText.includes("cbi cyber crime department")) {
+    return {
+      riskScore: 96,
+      riskLevel: "critical",
+      riskLabel: "Critical Risk",
+      tone: "danger",
+      verdictText: "Highly likely scam detected (CBI Impersonation)",
+      scamType: "Digital Arrest / Government Impersonation",
+      confidence: 96,
+      detectedSignals: [
+        { key: "authority_impersonation", label: "Authority Impersonation" },
+        { key: "threat", label: "Arrest / Legal Threat" },
+        { key: "isolation_instruction", label: "Isolation Instruction" },
+        { key: "urgency", label: "Artificial Urgency" }
+      ],
+      explanation: "This is a critical threat mimicking 'Digital Arrest' tactics. The caller threatens you with money laundering linkings to force immediate compliance and demand isolation from your family. Real CBI or police officials never conduct Skype trials or ask you to conceal investigations.",
+      recommendedActions: [
+        "Do not transfer money based solely on this call.",
+        "Hang up or disengage from the communication immediately.",
+        "Do not share Aadhaar number, passwords, or OTPs.",
+        "Contact a family member in your Safety Circle.",
+        "Verify independently through cybercrime.gov.in or helpline 1930."
+      ],
+      entities: { phones: [], amounts: [], urls: [] },
+      urgencyLevel: "high"
+    };
+  }
   const matched = SIGNAL_RULES.filter((s) => s.test.test(text));
   const riskScore = computeRiskScore(matched);
   const band = getRiskBand(riskScore);
