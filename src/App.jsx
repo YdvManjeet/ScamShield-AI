@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Shield, Menu, X, LayoutDashboard, ScanLine, FlaskConical,
-  MessageCircleQuestion, Radar, Users, GraduationCap, Flag, Settings
+  MessageCircleQuestion, Radar, Users, GraduationCap, Flag, Settings,
+  ShieldAlert, ShieldCheck
 } from "lucide-react";
 import { scoreRepository } from "./services/storage";
 import {
@@ -31,6 +32,7 @@ import SafetyCirclePage from "./pages/SafetyCirclePage";
 import LearnPage from "./pages/LearnPage";
 import ReportPage from "./pages/ReportPage";
 import ProfilePage from "./pages/ProfilePage";
+import PrivacyPage from "./pages/PrivacyPage";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -61,14 +63,26 @@ export default function App() {
   const [missions, setMissions] = useState(MISSIONS);
   const [events, setEvents] = useState(SEED_SCORE_EVENTS);
   const [simRepeats, setSimRepeats] = useState({});
+  const [scanHistory, setScanHistory] = useState([]);
+  
+  // Gamification & Learning Metrics
+  const [xp, setXp] = useState(0);
+  const [streak, setStreak] = useState(3); // default 3 days
+  const [badges, setBadges] = useState(["scam-resistant"]);
   const [scanRewardCount, setScanRewardCount] = useState(0);
   const [rewardedScanKeys, setRewardedScanKeys] = useState([]);
-  const [scanHistory, setScanHistory] = useState([]);
   
   // Inter-page prefills
   const [pendingCoachQuestion, setPendingCoachQuestion] = useState(null);
   const [reportPrefill, setReportPrefill] = useState(null);
   const [hydrated, setHydrated] = useState(false);
+
+  const activeNavItems = useMemo(() => {
+    if (!guardianMode) return NAV_ITEMS;
+    return NAV_ITEMS.filter((item) =>
+      ["dashboard", "coach", "circle", "profile"].includes(item.id)
+    );
+  }, [guardianMode]);
 
   // ---- Hydrate storage ----
   useEffect(() => {
@@ -91,6 +105,9 @@ export default function App() {
         setSimRepeats(scoreState.simRepeats || {});
         setScanRewardCount(scoreState.scanRewardCount || 0);
         setRewardedScanKeys(scoreState.rewardedScanKeys || []);
+        setXp(scoreState.xp || 0);
+        setStreak(scoreState.streak || 3);
+        setBadges(scoreState.badges || ["scam-resistant"]);
         setAppPhase("app");
       } else {
         setAppPhase("onboarding");
@@ -108,9 +125,12 @@ export default function App() {
       missions,
       simRepeats,
       scanRewardCount,
-      rewardedScanKeys
+      rewardedScanKeys,
+      xp,
+      streak,
+      badges
     });
-  }, [hydrated, appPhase, components, events, missions, simRepeats, scanRewardCount, rewardedScanKeys]);
+  }, [hydrated, appPhase, components, events, missions, simRepeats, scanRewardCount, rewardedScanKeys, xp, streak, badges]);
 
   // ---- Persist scan history ----
   useEffect(() => {
@@ -143,23 +163,73 @@ export default function App() {
     if (!mission || mission.done) return;
     setMissions((prev) => prev.map((m) => (m.id === id ? { ...m, done: true } : m)));
     bumpComponent(mission.component, mission.gain, `Completed mission: ${mission.title}`);
+    
+    // Reward XP, Streak & Badges
+    setXp((prev) => prev + 150);
+    setStreak((prev) => prev + 1);
+    setBadges((prev) => {
+      const next = [...prev];
+      if (id === "m1" && !next.includes("digital-arrest-defender")) {
+        next.push("digital-arrest-defender");
+      }
+      if (id === "m2" && !next.includes("upi-guardian")) {
+        next.push("upi-guardian");
+      }
+      if (id === "m5" && !next.includes("phishing-spotter")) {
+        next.push("phishing-spotter");
+      }
+      // Count total completed including this one
+      const completedCount = missions.filter(m => m.done || m.id === id).length;
+      if (completedCount >= 2 && !next.includes("family-protector")) {
+        next.push("family-protector");
+      }
+      if (completedCount >= 4 && !next.includes("scam-resistant")) {
+        next.push("scam-resistant");
+      }
+      return next;
+    });
   };
 
-  const onCompleteSimulation = (scenarioId, passed) => {
-    const count = simRepeats[scenarioId] || 0;
-    const gain = passed
-      ? SIMULATION_PASS_SCHEDULE[Math.min(count, SIMULATION_PASS_SCHEDULE.length - 1)]
-      : (count === 0 ? SIMULATION_FIRST_FAIL_PENALTY : 0);
-    
-    setSimRepeats((prev) => ({ ...prev, [scenarioId]: (prev[scenarioId] || 0) + 1 }));
-    if (gain !== 0) {
-      bumpComponent(
-        "simulationPerformance",
-        gain,
-        passed 
-          ? `Passed simulation: ${scenarioId.replace("-", " ")}` 
-          : `Fell for simulation: ${scenarioId.replace("-", " ")}`
-      );
+  const onCompleteSimulation = (scenarioId, passed, scoreVal = 0) => {
+    const currentRecord = simRepeats[scenarioId];
+    const count = currentRecord && typeof currentRecord === "object"
+      ? (currentRecord.attempts || 0)
+      : (currentRecord || 0);
+
+    const newAttempts = count + 1;
+    const previousBest = currentRecord && typeof currentRecord === "object"
+      ? (currentRecord.bestScore || 0)
+      : (passed ? 100 : 0);
+    const newBestScore = Math.max(previousBest, scoreVal);
+
+    setSimRepeats((prev) => ({
+      ...prev,
+      [scenarioId]: {
+        attempts: newAttempts,
+        bestScore: newBestScore,
+        latestScore: scoreVal,
+        completed: true,
+        passed: passed
+      }
+    }));
+
+    // Balanced score adjustments
+    if (passed) {
+      if (count === 0) {
+        bumpComponent("simulationPerformance", 6, `Passed simulation: ${scenarioId.replace("-", " ")}`);
+        bumpComponent("awareness", 3, `Developed awareness in: ${scenarioId.replace("-", " ")}`);
+        bumpComponent("responseReadiness", 2, `Improved response readiness in: ${scenarioId.replace("-", " ")}`);
+      } else if (count === 1) {
+        bumpComponent("simulationPerformance", 3, `Retried and passed simulation: ${scenarioId.replace("-", " ")}`);
+        bumpComponent("awareness", 1, `Reinforced awareness in: ${scenarioId.replace("-", " ")}`);
+        bumpComponent("responseReadiness", 1, `Reinforced response readiness in: ${scenarioId.replace("-", " ")}`);
+      } else if (count === 2) {
+        bumpComponent("simulationPerformance", 1, `Replayed simulation: ${scenarioId.replace("-", " ")}`);
+      }
+    } else {
+      if (count === 0) {
+        bumpComponent("simulationPerformance", -4, `Fell for simulation: ${scenarioId.replace("-", " ")}`);
+      }
     }
   };
 
@@ -186,11 +256,24 @@ export default function App() {
     }
   };
 
-  const handleAskCoachFromScan = (scamType) => {
-    const question = scamType && scamType !== "No specific pattern matched"
-      ? `Is this a ${scamType.toLowerCase()}? What should I do?`
-      : "What should I watch out for in messages like this?";
-    setPendingCoachQuestion(question);
+  const handleAskCoachFromScan = (result) => {
+    if (result && typeof result === "object") {
+      const org = result.scamType || "an unknown source";
+      const score = result.riskScore || 0;
+      setPendingCoachQuestion({
+        query: `I analyzed this message and found a ${score}% high-risk pattern. Explain why.`,
+        context: {
+          scamType: result.scamType,
+          riskScore: result.riskScore,
+          explanation: result.explanation
+        }
+      });
+    } else {
+      const questionText = result && result !== "No specific pattern matched"
+        ? `Is this a ${result.toLowerCase()}? What should I do?`
+        : "What should I watch out for in messages like this?";
+      setPendingCoachQuestion(questionText);
+    }
     goTo("coach");
   };
 
@@ -207,6 +290,13 @@ export default function App() {
   const handleOnboardingComplete = async ({ profile, responses, breakdown }) => {
     setComponents(breakdown);
     setEvents(SEED_SCORE_EVENTS);
+    setMissions(MISSIONS);
+    setSimRepeats({});
+    setScanRewardCount(0);
+    setRewardedScanKeys([]);
+    setXp(0);
+    setStreak(3);
+    setBadges(["scam-resistant"]);
     await scoreRepository.saveOnboarding({ completed: true, profile, responses });
     await scoreRepository.saveScoreState({
       breakdown,
@@ -219,9 +309,12 @@ export default function App() {
     setAppPhase("app");
   };
 
+  const [prefilledScannerText, setPrefilledScannerText] = useState("");
+
   const goTo = (id) => {
     setView(id);
     setMobileNavOpen(false);
+    if (id !== "scanner") setPrefilledScannerText("");
   };
 
   if (appPhase === "loading") {
@@ -248,9 +341,14 @@ export default function App() {
         showExplain={showExplain}
         setShowExplain={setShowExplain}
         guardianMode={guardianMode}
+        setGuardianMode={setGuardianMode}
+        goTo={goTo}
         events={events}
         missions={missions}
         onStartMission={completeMission}
+        xp={xp}
+        streak={streak}
+        badges={badges}
       />
     ),
     scanner: (
@@ -262,11 +360,14 @@ export default function App() {
         scanHistory={scanHistory}
         ollamaHost={ollamaHost}
         ollamaModel={ollamaModel}
+        guardianMode={guardianMode}
+        prefilledText={prefilledScannerText}
       />
     ),
     simulation: (
       <SimulationPage
         onCompleteSimulation={onCompleteSimulation}
+        simRepeats={simRepeats}
         ollamaHost={ollamaHost}
         ollamaModel={ollamaModel}
       />
@@ -282,7 +383,7 @@ export default function App() {
     ),
     radar: <RadarPage />,
     circle: <SafetyCirclePage guardianMode={guardianMode} setGuardianMode={setGuardianMode} />,
-    learn: <LearnPage missions={missions} onComplete={completeMission} />,
+    learn: <LearnPage missions={missions} onComplete={completeMission} components={components} xp={xp} streak={streak} badges={badges} />,
     report: <ReportPage prefill={reportPrefill} onConsumedPrefill={() => setReportPrefill(null)} />,
     profile: (
       <ProfilePage
@@ -292,12 +393,17 @@ export default function App() {
         setOllamaHost={setOllamaHost}
         ollamaModel={ollamaModel}
         setOllamaModel={setOllamaModel}
+        guardianMode={guardianMode}
+        setGuardianMode={setGuardianMode}
       />
     ),
+    privacy: <PrivacyPage />,
   };
 
+
+
   return (
-    <div className="ss-root">
+    <div className={`ss-root ${guardianMode ? "ss-guardian-active" : ""}`}>
       <aside className={`ss-sidebar ${mobileNavOpen ? "open" : ""}`}>
         <div className="ss-logo">
           <div className="ss-logo-mark"><Shield size={17} color="white" strokeWidth={2.4} /></div>
@@ -313,7 +419,7 @@ export default function App() {
         </div>
 
         <nav className="ss-nav">
-          {NAV_ITEMS.map((item) => (
+          {activeNavItems.map((item) => (
             <button
               key={item.id}
               className={`ss-nav-item ${view === item.id ? "active" : ""}`}
@@ -325,8 +431,27 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="ss-sidebar-foot">
-          <label className="ss-guardian-toggle">
+        <div className="ss-sidebar-foot" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "stretch" }}>
+          <button
+            style={{
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid var(--surface-border)",
+              color: "var(--text-muted)",
+              fontSize: "12px",
+              cursor: "pointer",
+              padding: "6px",
+              borderRadius: "6px",
+              textAlign: "center",
+              display: "block",
+              width: "100%",
+              fontWeight: "600"
+            }}
+            onClick={() => goTo("privacy")}
+          >
+            🛡️ Privacy Center
+          </button>
+          
+          <label className="ss-guardian-toggle" style={{ marginTop: "4px" }}>
             Guardian Mode
             <span className="ss-toggle">
               <input type="checkbox" checked={guardianMode} onChange={(e) => setGuardianMode(e.target.checked)} />
@@ -337,6 +462,7 @@ export default function App() {
       </aside>
 
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {/* Navigation / Header Area */}
         <div className="ss-topbar">
           <button className="ss-mobile-toggle" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Toggle navigation">
             {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
@@ -345,10 +471,87 @@ export default function App() {
             <div className="ss-logo-mark"><Shield size={15} color="white" /></div>
             <div className="ss-logo-word">ScamShield<span>AI</span></div>
           </div>
+          
+          {/* Mobile Guardian Button Toggle */}
+          <button
+            onClick={() => setGuardianMode(!guardianMode)}
+            style={{ 
+              background: guardianMode ? "var(--warning)" : "var(--surface-2)", 
+              border: "1px solid var(--surface-border)", 
+              borderRadius: "6px", 
+              padding: "4px 8px", 
+              fontSize: "10.5px", 
+              fontWeight: "700", 
+              color: guardianMode ? "black" : "var(--text)" 
+            }}
+          >
+            {guardianMode ? "🛡️ Guardian" : "Normal"}
+          </button>
+
           <div className="ss-score-chip-num" style={{ fontSize: 15 }}>{score}</div>
         </div>
-        <main className="ss-main">{pageMap[view]}</main>
+
+        {/* Desktop top header toggle bar */}
+        <div 
+          style={{ 
+            display: "flex", 
+            justifyContent: "flex-end", 
+            alignItems: "center", 
+            padding: "16px 34px 0", 
+            gap: "12px" 
+          }} 
+          className="ss-desktop-header-bar"
+        >
+          {guardianMode ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "#FBBF24", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600" }}>
+              <ShieldAlert size={14} />
+              <span>Easy Interface Active</span>
+              <button 
+                onClick={() => setGuardianMode(false)} 
+                className="ss-btn-primary" 
+                style={{ padding: "4px 10px", minHeight: "auto", fontSize: "11px", background: "var(--warning)", color: "black", border: "none", marginLeft: "10px" }}
+              >
+                Switch to Advanced
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => setGuardianMode(true)} 
+              className="ss-btn-secondary" 
+              style={{ width: "auto", margin: 0, padding: "6px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <ShieldCheck size={14} color="var(--safe-strong)" />
+              Enable Guardian Mode (Easy)
+            </button>
+          )}
+        </div>
+
+        {/* Content Box */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto" }}>
+          <main className="ss-main" style={{ flex: 1, paddingBottom: "34px" }}>
+            {pageMap[view]}
+          </main>
+          
+          {/* Trust Disclaimer and Privacy Footer */}
+          <footer style={{ 
+            padding: "20px 34px", 
+            borderTop: "1px solid var(--surface-border)", 
+            fontSize: "11px", 
+            color: "var(--text-muted)", 
+            textAlign: "center", 
+            lineHeight: "1.5" 
+          }}>
+            <div>
+              🛡️ <strong>Trust Advisory:</strong> ScamShield AI provides automated risk evaluations and safety learning scenarios. It does not replace official emergency services or direct police alerts. If you are experiencing a live fraud incident, please contact the official national Cyber Crime Helpline immediately at <strong>1930</strong> or report details to <strong>cybercrime.gov.in</strong>.
+            </div>
+            <div style={{ marginTop: "4px" }}>
+              ScamShield is an independent educational tool. We are not affiliated with the CBI, RBI, Police, NCRB, or the Government of India. All personal logs remain encrypted locally in browser storage.
+            </div>
+          </footer>
+        </div>
       </div>
     </div>
   );
 }
+
+

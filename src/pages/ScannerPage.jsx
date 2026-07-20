@@ -1,17 +1,21 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   ScanLine, ImagePlus, Link2, CreditCard, Phone, QrCode, Upload, Trash2,
   RefreshCw, CheckCircle2, AlertTriangle, ShieldCheck, Info, HelpCircle,
-  BookmarkPlus, MessageCircleQuestion, Flag, FlaskConical, ChevronRight, Eye, XCircle
+  BookmarkPlus, MessageCircleQuestion, Flag, FlaskConical, ChevronRight, Eye, XCircle,
+  Volume2, ShieldAlert, X
 } from "lucide-react";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import SectionHeading from "../components/SectionHeading";
-import { runScamAnalysis, analyzeUrlHeuristics, getDemoExtraction, mapScamTypeToReportOption } from "../services/scamEngine";
+import { runScamAnalysis, analyzeUrlHeuristics, getDemoExtraction, SAFETY_CIRCLE_SEED } from "../services/scamEngine";
 import { ollamaService } from "../services/ollama";
 
 const VERDICT_ICON = { safe: ShieldCheck, info: Info, warning: AlertTriangle, danger: XCircle };
+
+// Speech synthesis checker
+const isSpeechAvailable = typeof window !== "undefined" && window.speechSynthesis;
 
 function AnalysisProgress({ onDone, steps }) {
   const [visibleCount, setVisibleCount] = useState(1);
@@ -46,124 +50,477 @@ function AnalysisProgress({ onDone, steps }) {
   );
 }
 
-function ScanResultPanel({ result, savedAlready, onSave, onAskCoach, onGoReport, onGoSimulation }) {
+function ScanResultPanel({ result, savedAlready, onSave, onAskCoach, onGoReport, onGoSimulation, guardianMode }) {
   if (!result || result.riskLevel === "empty") return null;
   const VerdictIcon = VERDICT_ICON[result.tone] || Info;
   const hasEntities = result.entities && (result.entities.phones?.length || result.entities.amounts?.length || result.entities.urls?.length);
-
-  // If the result contains Ollama AI details, we'll format it beautifully
   const isAiEnhanced = !!result.aiResult;
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
-      <Card className="ss-scan-result">
-        <div className="ss-scan-verdict">
-          <div>
-            <Badge tone={result.tone} icon={VerdictIcon}>{result.riskLabel}</Badge>
-            <div className="ss-scan-verdict-text">{result.verdictText}</div>
+  const [explainMore, setExplainMore] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [copiedToast, setCopiedToast] = useState(null);
+
+  // Load Safety Circle
+  const safetyCircle = useMemo(() => {
+    try {
+      const saved = localStorage.getItem("ss:safety-circle");
+      return saved ? JSON.parse(saved) : SAFETY_CIRCLE_SEED;
+    } catch (err) {
+      return SAFETY_CIRCLE_SEED;
+    }
+  }, []);
+
+  // Simplified Text Translation Function
+  const getSimplifiedExplanation = () => {
+    const text = (result.explanation || "").toLowerCase();
+    const type = (result.scamType || "").toLowerCase();
+    
+    if (type.includes("digital arrest") || text.includes("cbi") || text.includes("arrest") || text.includes("police") || text.includes("narcotics")) {
+      return "They are pretending to be a police or government official and trying to scare you into acting quickly.";
+    }
+    if (type.includes("upi") || type.includes("payment") || text.includes("upi pin") || text.includes("qr code") || text.includes("refund")) {
+      return "They are claiming to refund you money but are actually trying to steal your banking PIN to empty your account.";
+    }
+    if (type.includes("kyc") || type.includes("otp") || text.includes("otp") || text.includes("suspend") || text.includes("block")) {
+      return "They are pretending to be from your bank and are trying to steal your SMS code (OTP) to log into your account.";
+    }
+    if (type.includes("emergency") || text.includes("accident") || text.includes("emergency") || text.includes("voice")) {
+      return "They are trying to play on your family emotions by claiming a relative is in trouble and needs urgent cash.";
+    }
+    if (type.includes("investment") || text.includes("profit") || text.includes("guaranteed") || text.includes("sebi")) {
+      return "They are promising you fake daily profits or jobs and asking you to pay money upfront to register.";
+    }
+    return "They are using artificial fear or urgency to get you to act before you have time to think.";
+  };
+
+  const handleSpeak = (langCode) => {
+    if (!isSpeechAvailable) return;
+    window.speechSynthesis.cancel();
+    
+    let speakText = "";
+    if (langCode === "hi") {
+      speakText = "चेतावनी। यह एक घोटाला हो सकता है। कृपया ध्यान दें: किसी को पैसे न भेजें। अपना ओटीपी साझा न करें। अपना यूपीआई पिन दर्ज न करें। स्क्रीन शेयर करने वाला ऐप इंस्टॉल न करें। कॉल तुरंत काट दें।";
+    } else {
+      speakText = "Warning. This may be a scam. Please remember: Do not send money. Do not share your OTP code. Do not enter your UPI PIN. Do not install any screen sharing apps. Hang up the call immediately.";
+    }
+    
+    const utterance = new SpeechSynthesisUtterance(speakText);
+    utterance.lang = langCode === "hi" ? "hi-IN" : "en-US";
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Generate customized alert text dynamically
+  const getAlertText = () => {
+    const org = result.scamType && result.scamType !== "No specific pattern matched"
+      ? result.scamType
+      : "an unknown source";
+    return `ScamShield Safety Alert\n\nI received a suspicious communication claiming to be from ${org}.\n\nScamShield detected high-risk scam indicators.\n\nI have not intentionally shared any banking credentials through ScamShield.\n\nPlease contact me directly to help verify this.`;
+  };
+
+  const handleCopyAlert = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedToast("Alert copied to clipboard!");
+        setTimeout(() => setCopiedToast(null), 2500);
+      })
+      .catch(() => {
+        setCopiedToast("Failed to copy alert");
+        setTimeout(() => setCopiedToast(null), 2500);
+      });
+  };
+
+  const handleShareAlert = (text) => {
+    if (navigator.share) {
+      navigator.share({
+        title: "ScamShield Safety Alert",
+        text: text
+      }).catch((err) => console.log("Share failed:", err));
+    } else {
+      handleCopyAlert(text);
+    }
+  };
+
+  const isHighRisk = result.riskScore >= 45;
+
+  const renderModal = () => {
+    if (!showModal) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+        <Card style={{ maxWidth: "480px", width: "100%", padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: "16px", display: "flex", gap: "6px", alignItems: "center" }}>
+              <ShieldAlert size={16} color="var(--warning)" /> Contact Safety Circle
+            </h3>
+            <button onClick={() => { setShowModal(false); setSelectedContact(null); }} style={{ background: "none", border: "none", color: "var(--text)" }}>
+              <X size={18} />
+            </button>
           </div>
-          <div className="ss-risk-score">{result.riskScore}<span>/100 risk</span></div>
-        </div>
 
-        {result.scamType && result.scamType !== "No specific pattern matched" && (
-          <div className="ss-scan-type"><strong>Likely Pattern:</strong> {result.scamType} <span className="ss-hint">(confidence {result.confidence}%)</span></div>
-        )}
+          <p style={{ margin: 0, fontSize: "13.5px", color: "var(--text-muted)", lineHeight: 1.45 }}>
+            "Scammers isolate. ScamShield reconnects. Before taking any financial action, verify this call or message with someone you trust."
+          </p>
 
-        {result.localHeuristicOnly && (
-          <div className="ss-heuristic-note"><Info size={13} /> Heuristic scan. Toggle Deep AI Scan for deep semantic validation.</div>
-        )}
+          {safetyCircle.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {safetyCircle.map(m => (
+                <div 
+                  key={m.id}
+                  style={{ background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <strong style={{ fontSize: "14.5px" }}>{m.name}</strong>
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "8px" }}>({m.relation})</span>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--accent-strong)" }}>{m.prefMethod.toUpperCase()} preferred</span>
+                  </div>
 
-        {result.detectedSignals?.length > 0 ? (
-          <div>
-            <div className="ss-card-title" style={{ marginTop: 10 }}>Rule-Based Warning Signs</div>
-            <div className="ss-flag-list">
-              {result.detectedSignals.map((f) => <div key={f.key} className="ss-flag-item"><AlertTriangle size={13} /> {f.label}</div>)}
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <a 
+                      href={`tel:${m.phone}`}
+                      className="ss-btn-secondary"
+                      style={{ flex: 1, margin: 0, padding: "8px", fontSize: "12.5px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", textDecoration: "none" }}
+                    >
+                      <Phone size={12} /> Call
+                    </a>
+                    <button 
+                      className="ss-btn-primary"
+                      style={{ flex: 1, margin: 0, padding: "8px", fontSize: "12.5px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                      onClick={() => setSelectedContact(m)}
+                    >
+                      <Share2 size={12} /> Share Alert
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        ) : (
-          !isAiEnhanced && <div className="ss-flag-empty">No heuristics triggers hit — check details.</div>
-        )}
-
-        {result.explanation && (
-          <div className="ss-why-box">
-            <div className="ss-card-title"><HelpCircle size={14} /> Analysis Summary</div>
-            <p>{result.explanation}</p>
-          </div>
-        )}
-
-        {result.riskScore >= 21 && result.recommendedActions?.length > 0 && (
-          <div className="ss-action-box">
-            <div className="ss-card-title">What should I do?</div>
-            <ol className="ss-action-list">
-              {result.recommendedActions.map((a, i) => <li key={i}>{a}</li>)}
-            </ol>
-          </div>
-        )}
-
-        {hasEntities ? (
-          <div className="ss-entities">
-            {result.entities.phones?.length > 0 && <div><strong>Phone numbers:</strong> {result.entities.phones.join(", ")}</div>}
-            {result.entities.amounts?.length > 0 && <div><strong>Amounts:</strong> {result.entities.amounts.join(", ")}</div>}
-            {result.entities.urls?.length > 0 && <div><strong>Links:</strong> {result.entities.urls.join(", ")}</div>}
-          </div>
-        ) : null}
-      </Card>
-
-      {/* Ollama Deep AI Scan panel */}
-      {isAiEnhanced && (
-        <Card className="ss-scan-result" style={{ borderLeft: "4px solid var(--accent)", background: "rgba(59, 130, 246, 0.03)" }}>
-          <div className="ss-scan-verdict">
-            <div>
-              <Badge tone={result.aiResult.riskLevel === "low" ? "safe" : result.aiResult.riskLevel === "caution" ? "info" : result.aiResult.riskLevel === "suspicious" ? "warning" : "danger"} icon={ShieldCheck}>
-                Ollama AI Verdict: {result.aiResult.riskLabel}
-              </Badge>
-              <div className="ss-scan-verdict-text" style={{ color: "var(--accent-strong)" }}>Semantic LLM verification successful</div>
+          ) : (
+            <div style={{ padding: "14px", textAlign: "center", background: "var(--surface-2)", border: "1px dashed var(--surface-border)", borderRadius: "8px" }}>
+              <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 10px" }}>You haven't added anyone to your Safety Circle yet.</p>
             </div>
-            <div className="ss-risk-score" style={{ color: "var(--accent-strong)" }}>{result.aiResult.riskScore}<span>/100 risk</span></div>
-          </div>
+          )}
 
-          <div className="ss-scan-type">
-            <strong>LLM Scam Classification:</strong> {result.aiResult.scamType} <span className="ss-hint">(confidence {result.aiResult.confidence}%)</span>
-          </div>
+          {copiedToast && (
+            <div style={{ background: "var(--safe-strong)", color: "white", padding: "6px 12px", borderRadius: "6px", fontSize: "12.5px", textAlign: "center", fontWeight: "600" }}>
+              {copiedToast}
+            </div>
+          )}
 
-          {result.aiResult.detectedSignals?.length > 0 && (
-            <div>
-              <div className="ss-card-title" style={{ marginTop: 10 }}>Semantic Indicators Detected</div>
-              <div className="ss-flag-list">
-                {result.aiResult.detectedSignals.map((s, i) => (
-                  <div key={i} className="ss-flag-item" style={{ color: "var(--accent-strong)" }}><ShieldCheck size={13} /> {s}</div>
-                ))}
+          {/* Sub-card to copy/share text alert for the selected contact */}
+          {selectedContact && (
+            <div style={{ background: "rgba(59, 130, 246, 0.05)", border: "1px solid rgba(59, 130, 246, 0.25)", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong style={{ fontSize: "12.5px", color: "var(--accent-strong)" }}>Alert message to {selectedContact.name}:</strong>
+                <button onClick={() => setSelectedContact(null)} style={{ background: "none", border: "none", color: "var(--text-muted)" }}><X size={14} /></button>
+              </div>
+
+              <textarea 
+                className="ss-textarea" 
+                rows={7} 
+                style={{ fontSize: "12.5px" }} 
+                readOnly 
+                value={getAlertText()} 
+              />
+
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button 
+                  className="ss-btn-secondary" 
+                  style={{ flex: 1, margin: 0, padding: "6px", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                  onClick={() => handleCopyAlert(getAlertText())}
+                >
+                  Copy Text
+                </button>
+                <button 
+                  className="ss-btn-secondary" 
+                  style={{ flex: 1, margin: 0, padding: "6px", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
+                  onClick={() => handleShareAlert(getAlertText())}
+                >
+                  <Share2 size={11} /> Share Alert
+                </button>
               </div>
             </div>
           )}
+        </Card>
+      </div>
+    );
+  };
 
-          <div className="ss-why-box" style={{ background: "var(--surface-2)" }}>
-            <div className="ss-card-title" style={{ color: "var(--text)" }}><HelpCircle size={14} /> AI Scam Coach Reasoning</div>
-            <p style={{ color: "var(--text)" }}>{result.aiResult.explanation}</p>
+  // ---- Guardian Mode Result Panel View ----
+  if (guardianMode) {
+    return (
+      <>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+          
+          {isHighRisk ? (
+            // Flashing High Risk Danger Warnings
+            <div 
+              style={{ 
+                background: "rgba(239, 68, 68, 0.12)", 
+                border: "4px solid var(--danger)", 
+                borderRadius: "18px", 
+                padding: "22px 24px", 
+                animation: "pulse 2s infinite" 
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--danger)" }}>
+                <ShieldAlert size={36} />
+                <h2 style={{ fontSize: "30px", fontWeight: "800", margin: 0 }}>STOP! This may be a scam.</h2>
+              </div>
+              
+              <p style={{ fontSize: "16px", color: "white", marginTop: "12px", fontWeight: "600" }}>
+                {getSimplifiedExplanation()}
+              </p>
+
+              <div style={{ marginTop: "18px", background: "rgba(0,0,0,0.3)", borderRadius: "10px", padding: "16px", border: "1px solid rgba(239,68,68,0.25)" }}>
+                <strong style={{ fontSize: "15px", color: "#FCA5A5", textTransform: "uppercase", letterSpacing: "0.05em" }}>DO NOT PERFORM THESE ACTIONS:</strong>
+                <ul style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px", fontSize: "15.5px", color: "#FEE2E2", marginTop: "8px", margin: "8px 0 0 0" }}>
+                  <li>❌ <strong>DO NOT send any money</strong> or registration fees.</li>
+                  <li>❌ <strong>DO NOT share your OTP</strong> verification code.</li>
+                  <li>❌ <strong>DO NOT enter your UPI PIN</strong> (PIN is only for sending money, never receiving).</li>
+                  <li>❌ <strong>DO NOT install screen sharing apps</strong> (like Skype or AnyDesk).</li>
+                  <li>❌ <strong>DO NOT stay on the call.</strong> Hang up immediately.</li>
+                </ul>
+              </div>
+
+              {/* TTS Aloud buttons */}
+              {isSpeechAvailable && (
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px", alignItems: "center" }}>
+                  <span style={{ fontSize: "14px", color: "#D1D5DB" }}>🔊 Hear Advice:</span>
+                  <button 
+                    className="ss-btn-secondary" 
+                    style={{ padding: "6px 12px", minHeight: "auto", margin: 0, width: "auto", fontSize: "12.5px" }}
+                    onClick={() => handleSpeak("en")}
+                  >
+                    Read Aloud (English)
+                  </button>
+                  <button 
+                    className="ss-btn-secondary" 
+                    style={{ padding: "6px 12px", minHeight: "auto", margin: 0, width: "auto", fontSize: "12.5px" }}
+                    onClick={() => handleSpeak("hi")}
+                  >
+                    सुनें (हिंदी)
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Safe / Caution Warning
+            <div style={{ background: "rgba(34, 197, 94, 0.08)", border: "3px solid var(--safe-strong)", borderRadius: "18px", padding: "22px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--safe-strong)" }}>
+                <ShieldCheck size={36} />
+                <h2 style={{ fontSize: "26px", fontWeight: "700", margin: 0 }}>Looks Safe</h2>
+              </div>
+              <p style={{ fontSize: "16px", color: "white", marginTop: "8px" }}>
+                No major scam patterns were found in this text. However, always stay cautious. Never share OTPs or enter your UPI PIN for strangers.
+              </p>
+            </div>
+          )}
+
+          {/* Explain More Collapsible details */}
+          <Card style={{ padding: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "14.5px", color: "var(--text-muted)" }}>Technical Scan Diagnostics</span>
+              <button 
+                className="ss-btn-secondary" 
+                style={{ width: "auto", margin: 0, padding: "6px 12px", fontSize: "12px", minHeight: "auto" }}
+                onClick={() => setExplainMore(!explainMore)}
+              >
+                {explainMore ? "Hide Technical Details" : "Explain More"}
+              </button>
+            </div>
+
+            {explainMore && (
+              <div style={{ marginTop: "14px", borderTop: "1px solid var(--surface-border)", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
+                  <span>Scam Pattern Type:</span>
+                  <strong>{result.scamType || "General Check"}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
+                  <span>Risk Score:</span>
+                  <strong style={{ color: result.tone === "danger" ? "var(--danger)" : "var(--safe-strong)" }}>{result.riskScore}/100</strong>
+                </div>
+                {result.detectedSignals?.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "4px" }}>Triggers Found:</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {result.detectedSignals.map((s, i) => <Badge key={i} tone="warning">{s.label}</Badge>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* Verification Advisement card in Guardian Mode */}
+          {isHighRisk && (
+            <Card style={{ background: "rgba(245, 158, 11, 0.08)", border: "2px dashed var(--warning)", padding: "18px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div>
+                <strong style={{ fontSize: "15px", color: "var(--warning)" }}>⚠️ Independent Verification Advised</strong>
+                <p style={{ margin: "4px 0 0", fontSize: "14.5px", color: "var(--text)" }}>Before taking any financial action, consider contacting someone you trust.</p>
+              </div>
+              <button className="ss-btn-primary" onClick={() => setShowModal(true)} style={{ width: "100%", background: "var(--warning)", color: "black", fontSize: "16px", fontWeight: "700" }}>
+                Contact Safety Circle
+              </button>
+            </Card>
+          )}
+
+          {/* Action Panel */}
+          <Card style={{ padding: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                <a href="tel:1930" className="ss-btn-primary" style={{ flex: 1, background: "var(--danger)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", textDecoration: "none" }}>
+                  📞 Call Helpline (1930)
+                </a>
+                <button className="ss-btn-secondary" onClick={() => onAskCoach(result)} style={{ flex: 1, margin: 0 }}>
+                  Ask Scam Coach
+                </button>
+              </div>
+              
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button className="ss-btn-secondary" onClick={onGoSimulation} style={{ flex: 1, margin: 0 }}>
+                  Start Practice Scenario
+                </button>
+                <button className="ss-btn-primary" style={{ flex: 1 }} onClick={() => onSave(result)} disabled={savedAlready}>
+                  {savedAlready ? "Saved to History" : "Save this Report"}
+                </button>
+              </div>
+            </div>
+          </Card>
+
+        </div>
+        {renderModal()}
+      </>
+    );
+  }
+
+  // ---- Advanced Result Panel View (Original) ----
+  return (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+        <Card className="ss-scan-result">
+          <div className="ss-scan-verdict">
+            <div>
+              <Badge tone={result.tone} icon={VerdictIcon}>{result.riskLabel}</Badge>
+              <div className="ss-scan-verdict-text">{result.verdictText}</div>
+            </div>
+            <div className="ss-risk-score">{result.riskScore}<span>/100 risk</span></div>
           </div>
 
-          {result.aiResult.recommendedActions?.length > 0 && (
-            <div className="ss-action-box" style={{ background: "rgba(59, 130, 246, 0.08)", borderColor: "rgba(59,130,246,0.2)" }}>
-              <div className="ss-card-title" style={{ color: "var(--accent-strong)" }}>AI Safety Roadmap</div>
+          {result.scamType && result.scamType !== "No specific pattern matched" && (
+            <div className="ss-scan-type"><strong>Likely Pattern:</strong> {result.scamType} <span className="ss-hint">(confidence {result.confidence}%)</span></div>
+          )}
+
+          {result.localHeuristicOnly && (
+            <div className="ss-heuristic-note"><Info size={13} /> Heuristic scan. Toggle Deep AI Scan for deep semantic validation.</div>
+          )}
+
+          {result.detectedSignals?.length > 0 ? (
+            <div>
+              <div className="ss-card-title" style={{ marginTop: 10 }}>Rule-Based Warning Signs</div>
+              <div className="ss-flag-list">
+                {result.detectedSignals.map((f) => <div key={f.key} className="ss-flag-item"><AlertTriangle size={13} /> {f.label}</div>)}
+              </div>
+            </div>
+          ) : (
+            !isAiEnhanced && <div className="ss-flag-empty">No heuristics triggers hit — check details.</div>
+          )}
+
+          {result.explanation && (
+            <div className="ss-why-box">
+              <div className="ss-card-title"><HelpCircle size={14} /> Analysis Summary</div>
+              <p>{result.explanation}</p>
+            </div>
+          )}
+
+          {result.riskScore >= 21 && result.recommendedActions?.length > 0 && (
+            <div className="ss-action-box">
+              <div className="ss-card-title">What should I do?</div>
               <ol className="ss-action-list">
-                {result.aiResult.recommendedActions.map((a, i) => <li key={i} style={{ color: "var(--text)" }}>{a}</li>)}
+                {result.recommendedActions.map((a, i) => <li key={i}>{a}</li>)}
               </ol>
             </div>
           )}
-        </Card>
-      )}
 
-      <Card style={{ padding: "14px 20px" }}>
-        <div className="ss-scan-actions-row">
-          <button className="ss-btn-tertiary" onClick={() => onAskCoach(result.scamType)}><MessageCircleQuestion size={14} /> Ask AI Scam Coach</button>
-          <button className="ss-btn-tertiary" onClick={() => onGoReport(result)}><Flag size={14} /> Report Scam</button>
-          <button className="ss-btn-tertiary" onClick={onGoSimulation}><FlaskConical size={14} /> Start Related Simulation</button>
-          <button className="ss-btn-primary ss-btn-tertiary-primary" onClick={() => onSave(result)} disabled={savedAlready}>
-            <BookmarkPlus size={14} /> {savedAlready ? "Saved" : "Save Scan"}
-          </button>
-        </div>
-      </Card>
-    </div>
+          {hasEntities ? (
+            <div className="ss-entities">
+              {result.entities.phones?.length > 0 && <div><strong>Phone numbers:</strong> {result.entities.phones.join(", ")}</div>}
+              {result.entities.amounts?.length > 0 && <div><strong>Amounts:</strong> {result.entities.amounts.join(", ")}</div>}
+              {result.entities.urls?.length > 0 && <div><strong>Links:</strong> {result.entities.urls.join(", ")}</div>}
+            </div>
+          ) : null}
+        </Card>
+
+        {/* Ollama Deep AI Scan panel */}
+        {isAiEnhanced && (
+          <Card className="ss-scan-result" style={{ borderLeft: "4px solid var(--accent)", background: "rgba(59, 130, 246, 0.03)" }}>
+            <div className="ss-scan-verdict">
+              <div>
+                <Badge tone={result.aiResult.riskLevel === "low" ? "safe" : result.aiResult.riskLevel === "caution" ? "info" : result.aiResult.riskLevel === "suspicious" ? "warning" : "danger"} icon={ShieldCheck}>
+                  Ollama AI Verdict: {result.aiResult.riskLabel}
+                </Badge>
+                <div className="ss-scan-verdict-text" style={{ color: "var(--accent-strong)" }}>Semantic LLM verification successful</div>
+              </div>
+              <div className="ss-risk-score" style={{ color: "var(--accent-strong)" }}>{result.aiResult.riskScore}<span>/100 risk</span></div>
+            </div>
+
+            <div className="ss-scan-type">
+              <strong>LLM Scam Classification:</strong> {result.aiResult.scamType} <span className="ss-hint">(confidence {result.aiResult.confidence}%)</span>
+            </div>
+
+            {result.aiResult.detectedSignals?.length > 0 && (
+              <div>
+                <div className="ss-card-title" style={{ marginTop: 10 }}>Semantic Indicators Detected</div>
+                <div className="ss-flag-list">
+                  {result.aiResult.detectedSignals.map((s, i) => (
+                    <div key={i} className="ss-flag-item" style={{ color: "var(--accent-strong)" }}><ShieldCheck size={13} /> {s}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="ss-why-box" style={{ background: "var(--surface-2)" }}>
+              <div className="ss-card-title" style={{ color: "var(--text)" }}><HelpCircle size={14} /> AI Scam Coach Reasoning</div>
+              <p style={{ color: "var(--text)" }}>{result.aiResult.explanation}</p>
+            </div>
+
+            {result.aiResult.recommendedActions?.length > 0 && (
+              <div className="ss-action-box" style={{ background: "rgba(59, 130, 246, 0.08)", borderColor: "rgba(59,130,246,0.2)" }}>
+                <div className="ss-card-title" style={{ color: "var(--accent-strong)" }}>AI Safety Roadmap</div>
+                <ol className="ss-action-list">
+                  {result.aiResult.recommendedActions.map((a, i) => <li key={i} style={{ color: "var(--text)" }}>{a}</li>)}
+                </ol>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Verification Advisement card in Normal Mode */}
+        {isHighRisk && (
+          <Card style={{ background: "rgba(245, 158, 11, 0.08)", border: "1.5px dashed var(--warning)", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div>
+              <div style={{ fontWeight: "700", color: "var(--warning)", fontSize: "14px" }}>⚠️ Independent Verification Advised</div>
+              <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--text)" }}>Before taking any financial action, consider contacting someone you trust.</p>
+            </div>
+            <button className="ss-btn-primary" onClick={() => setShowModal(true)} style={{ width: "auto", margin: 0, padding: "8px 14px", minHeight: "auto", fontSize: "12.5px", background: "var(--warning)", color: "black" }}>
+              Contact Safety Circle
+            </button>
+          </Card>
+        )}
+
+        <Card style={{ padding: "14px 20px" }}>
+          <div className="ss-scan-actions-row">
+            <button className="ss-btn-tertiary" onClick={() => onAskCoach(result)}><MessageCircleQuestion size={14} /> Ask AI Scam Coach</button>
+            <button className="ss-btn-tertiary" onClick={() => onGoReport(result)}><Flag size={14} /> Report Scam</button>
+            <button className="ss-btn-tertiary" onClick={onGoSimulation}><FlaskConical size={14} /> Start Related Simulation</button>
+            <button className="ss-btn-primary ss-btn-tertiary-primary" onClick={() => onSave(result)} disabled={savedAlready}>
+              <BookmarkPlus size={14} /> {savedAlready ? "Saved" : "Save Scan"}
+            </button>
+          </div>
+        </Card>
+      </div>
+      {renderModal()}
+    </>
   );
 }
 
@@ -183,7 +540,9 @@ export default function ScannerPage({
   onGoSimulation,
   scanHistory,
   ollamaHost,
-  ollamaModel
+  ollamaModel,
+  guardianMode,
+  prefilledText = ""
 }) {
   const [tab, setTab] = useState("text");
   const [viewingScan, setViewingScan] = useState(null);
@@ -192,7 +551,14 @@ export default function ScannerPage({
   const [checkingOllama, setCheckingOllama] = useState(true);
 
   // Inputs
-  const [text, setText] = useState("");
+  const [text, setText] = useState(prefilledText || "");
+
+  useEffect(() => {
+    if (prefilledText) {
+      setText(prefilledText);
+      setTab("text");
+    }
+  }, [prefilledText]);
   const [imageUrl, setImageUrl] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [extractedText, setExtractedText] = useState("");
@@ -200,7 +566,6 @@ export default function ScannerPage({
   const [urlContext, setUrlContext] = useState("");
   const [upiId, setUpiId] = useState("");
   const [upiMsg, setUpiMsg] = useState("");
-  const [phoneNum, setPhoneNum] = useState("");
   const [phoneOrg, setPhoneOrg] = useState("");
   const [phoneScript, setPhoneScript] = useState("");
   const [qrFile, setQrFile] = useState(null);
@@ -218,7 +583,7 @@ export default function ScannerPage({
     setCheckingOllama(true);
     ollamaService.fetchModels(ollamaHost)
       .then((models) => {
-        const hasModels = models.length > 0;
+        const hasModels = models && models.length > 0;
         setOllamaAvailable(true);
         if (hasModels) {
           setUseOllama(true); // default to true if available and has models
@@ -251,6 +616,10 @@ export default function ScannerPage({
   };
 
   const getActiveTextToScan = () => {
+    // If in Guardian Mode, scan the text input or link context directly
+    if (guardianMode) {
+      return text;
+    }
     switch (tab) {
       case "text": return text;
       case "image": return extractedText;
@@ -275,8 +644,8 @@ export default function ScannerPage({
     const textToScan = getActiveTextToScan();
     let localResult = null;
     
-    // Evaluate heuristics first
-    if (tab === "link") {
+    // Evaluate heuristics
+    if (!guardianMode && tab === "link") {
       const base = analyzeUrlHeuristics(url);
       if (urlContext.trim()) {
         const textResult = runScamAnalysis(urlContext);
@@ -294,6 +663,7 @@ export default function ScannerPage({
         localResult = base;
       }
     } else {
+      // Handles both Guardian Mode scans and standard text checks
       localResult = runScamAnalysis(textToScan);
     }
 
@@ -301,14 +671,10 @@ export default function ScannerPage({
       try {
         const aiResponse = await ollamaService.analyzeScam(textToScan, ollamaHost, ollamaModel);
         
-        // Merge heuristic and AI results
         const finalResult = {
           ...localResult,
-          // Average the scores or let AI dictate if it's higher
           riskScore: Math.round((localResult.riskScore + aiResponse.riskScore) / 2),
-          // Set tone/labels based on merged score
           ...(() => {
-            const band = runScamAnalysis(textToScan); // helper mapping
             const score = Math.round((localResult.riskScore + aiResponse.riskScore) / 2);
             if (score <= 20) return { riskLevel: "low", riskLabel: "Low Risk", tone: "safe", verdictText: "No strong indicators detected" };
             if (score <= 45) return { riskLevel: "caution", riskLabel: "Caution", tone: "info", verdictText: "A few cautionary triggers present" };
@@ -317,7 +683,7 @@ export default function ScannerPage({
             return { riskLevel: "critical", riskLabel: "Critical Risk", tone: "danger", verdictText: "Highly likely scam detected" };
           })(),
           scamType: aiResponse.scamType || localResult.scamType,
-          aiResult: aiResponse, // embed original AI result
+          aiResult: aiResponse,
           explanation: localResult.detectedSignals.length > 0 
             ? `${localResult.explanation} AI agrees: ${aiResponse.explanation}` 
             : aiResponse.explanation
@@ -326,7 +692,6 @@ export default function ScannerPage({
         setResult(finalResult);
       } catch (err) {
         console.error("Ollama deep scan failed. Falling back to local heuristics.", err);
-        // Fallback to local heuristic only with warning
         setResult({
           ...localResult,
           explanation: `${localResult.explanation} (AI Deep Scan failed: Ollama connection offline)`
@@ -339,7 +704,7 @@ export default function ScannerPage({
   };
 
   const handleSave = (r) => {
-    onSaveScan(tab, getActiveTextToScan().slice(0, 140), r);
+    onSaveScan(guardianMode ? "text" : tab, getActiveTextToScan().slice(0, 140), r);
     setSaved(true);
   };
 
@@ -360,6 +725,110 @@ export default function ScannerPage({
       ]
     : null;
 
+  // ---- Guardian Mode View Render ----
+  if (guardianMode) {
+    return (
+      <div className="ss-page" style={{ animation: "fadeIn 0.3s ease" }}>
+        <SectionHeading eyebrow="Guardian Safe Checker" title="Check message for scams" />
+
+        {viewingScan ? (
+          <>
+            <button className="ss-link-btn" onClick={() => setViewingScan(null)}>
+              <ChevronRight size={14} style={{ transform: "rotate(180deg)" }} /> Back to Safe Checker
+            </button>
+            <div className="ss-heuristic-note"><Eye size={13} /> Viewing a saved scan report</div>
+            <ScanResultPanel result={viewingScan.result} savedAlready onSave={() => {}} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} guardianMode={guardianMode} />
+          </>
+        ) : (
+          <>
+            <Card style={{ padding: "24px" }}>
+              <label className="ss-label" htmlFor="scan-guardian-text" style={{ fontSize: "16px", fontWeight: "700" }}>
+                Paste the message, website link, or text you received:
+              </label>
+              
+              <textarea
+                id="scan-guardian-text"
+                className="ss-textarea"
+                rows={6}
+                style={{ fontSize: "16px", padding: "14px", borderRadius: "10px", marginTop: "8px" }}
+                placeholder="Paste or type SMS messages, WhatsApp requests, or links here..."
+                value={text}
+                onChange={(e) => { setText(e.target.value); setPhase("idle"); setResult(null); }}
+              />
+
+              <div style={{ marginTop: "14px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                <button 
+                  className="ss-btn-primary" 
+                  style={{ width: "100%", padding: "14px", fontSize: "17px", minHeight: "52px" }} 
+                  onClick={handleRunScan} 
+                  disabled={phase === "analyzing" || !text.trim()}
+                >
+                  {phase === "analyzing" ? "Analyzing for scams..." : "🔍 CHECK FOR SCAMS"}
+                </button>
+              </div>
+
+              {/* Simplified screenshot uploader */}
+              <div style={{ borderTop: "1px solid var(--surface-border)", marginTop: "20px", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "13.5px", color: "var(--text-muted)" }}>Have a photo or screenshot?</span>
+                {!imageFile ? (
+                  <button 
+                    className="ss-btn-secondary"
+                    style={{ width: "auto", margin: 0, padding: "6px 12px", minHeight: "auto", fontSize: "13px" }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Select Screenshot
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "13px", color: "var(--safe-strong)" }}>File loaded</span>
+                    <button 
+                      style={{ background: "none", border: "none", color: "var(--danger)" }}
+                      onClick={() => { setImageFile(null); setImageUrl(null); setText(""); setPhase("idle"); setResult(null); }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
+                <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    handleFileChange(f);
+                    setText(getDemoExtraction(f.size)); // auto extracts demo text in sandbox
+                  }
+                }} />
+              </div>
+            </Card>
+
+            {phase === "analyzing" && <AnalysisProgress onDone={handleDone} steps={analysisSteps} />}
+            {phase === "done" && <ScanResultPanel result={result} savedAlready={saved} onSave={handleSave} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} guardianMode={guardianMode} />}
+
+            {/* Simplified history */}
+            {scanHistory.length > 0 && (
+              <div style={{ marginTop: "20px" }}>
+                <h3 style={{ fontSize: "16px", color: "var(--text-muted)", marginBottom: "10px" }}>Your Past Checks</h3>
+                <div className="ss-history-list">
+                  {scanHistory.slice(0, 4).map((s) => (
+                    <button key={s.id} className="ss-history-item" onClick={() => setViewingScan(s)} style={{ padding: "14px" }}>
+                      <Badge tone={s.result.tone}>{s.riskLabel}</Badge>
+                      <div className="ss-history-item-body">
+                        <div className="ss-history-item-title" style={{ fontSize: "14.5px" }}>{s.result.riskScore >= 45 ? "Suspicious Message" : "Safe Message"}</div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                          Checked on {new Date(s.timestamp).toLocaleDateString("en-IN")}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ---- Advanced Mode View Render (Original) ----
   return (
     <div className="ss-page">
       <SectionHeading eyebrow="AI Scam Scanner" title="Analyse suspicious content before you act" />
@@ -400,7 +869,7 @@ export default function ScannerPage({
         <>
           <button className="ss-link-btn" onClick={() => setViewingScan(null)}><ChevronRight size={14} style={{ transform: "rotate(180deg)" }} /> Back to scanner</button>
           <div className="ss-heuristic-note"><Eye size={13} /> Viewing a saved scan from {new Date(viewingScan.timestamp).toLocaleString("en-IN")}</div>
-          <ScanResultPanel result={viewingScan.result} savedAlready onSave={() => {}} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} />
+          <ScanResultPanel result={viewingScan.result} savedAlready onSave={() => {}} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} guardianMode={guardianMode} />
         </>
       ) : (
         <>
@@ -536,7 +1005,7 @@ export default function ScannerPage({
           )}
 
           {phase === "analyzing" && <AnalysisProgress onDone={handleDone} steps={analysisSteps} />}
-          {phase === "done" && <ScanResultPanel result={result} savedAlready={saved} onSave={handleSave} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} />}
+          {phase === "done" && <ScanResultPanel result={result} savedAlready={saved} onSave={handleSave} onAskCoach={onAskCoach} onGoReport={onGoReport} onGoSimulation={onGoSimulation} guardianMode={guardianMode} />}
         </>
       )}
 

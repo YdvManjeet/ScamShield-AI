@@ -11,7 +11,9 @@ export default function ProfilePage({
   ollamaHost,
   setOllamaHost,
   ollamaModel,
-  setOllamaModel
+  setOllamaModel,
+  guardianMode,
+  setGuardianMode
 }) {
   const [notif, setNotif] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState("untested"); // 'testing' | 'connected' | 'failed'
@@ -89,6 +91,17 @@ export default function ProfilePage({
             </div>
             <label className="ss-toggle">
               <input type="checkbox" checked={notif} onChange={(e) => setNotif(e.target.checked)} />
+              <span className="ss-toggle-track"><span className="ss-toggle-thumb" /></span>
+            </label>
+          </div>
+
+          <div className="ss-settings-row">
+            <div>
+              <div className="ss-card-title"><ShieldAlert size={14} color="var(--warning)" /> Guardian Mode</div>
+              <div className="ss-hint">Enable accessibility-first fraud protection (larger text and simplified warnings)</div>
+            </div>
+            <label className="ss-toggle">
+              <input type="checkbox" checked={guardianMode} onChange={(e) => setGuardianMode(e.target.checked)} />
               <span className="ss-toggle-track"><span className="ss-toggle-thumb" /></span>
             </label>
           </div>
