@@ -3,7 +3,7 @@ import {
   ScanLine, ImagePlus, Link2, CreditCard, Phone, QrCode, Upload, Trash2,
   RefreshCw, CheckCircle2, AlertTriangle, ShieldCheck, Info, HelpCircle,
   BookmarkPlus, MessageCircleQuestion, Flag, FlaskConical, ChevronRight, Eye, XCircle,
-  Volume2, ShieldAlert, X
+  ShieldAlert, X, Share2
 } from "lucide-react";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
@@ -11,12 +11,12 @@ import EmptyState from "../components/EmptyState";
 import SectionHeading from "../components/SectionHeading";
 import { runScamAnalysis, analyzeUrlHeuristics, getDemoExtraction, SAFETY_CIRCLE_SEED } from "../services/scamEngine";
 import { ollamaService } from "../services/ollama";
-
+ 
 const VERDICT_ICON = { safe: ShieldCheck, info: Info, warning: AlertTriangle, danger: XCircle };
-
+ 
 // Speech synthesis checker
 const isSpeechAvailable = typeof window !== "undefined" && window.speechSynthesis;
-
+ 
 function AnalysisProgress({ onDone, steps }) {
   const [visibleCount, setVisibleCount] = useState(1);
   const analysisSteps = steps || [
@@ -26,7 +26,7 @@ function AnalysisProgress({ onDone, steps }) {
     "Analyzing known scam language...",
     "Evaluating isolation tactics...",
   ];
-
+ 
   useEffect(() => {
     if (visibleCount >= analysisSteps.length) {
       const t = setTimeout(onDone, 350);
@@ -34,8 +34,8 @@ function AnalysisProgress({ onDone, steps }) {
     }
     const t = setTimeout(() => setVisibleCount((c) => c + 1), 380);
     return () => clearTimeout(t);
-  }, [visibleCount, analysisSteps.length]);
-
+  }, [visibleCount, analysisSteps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+ 
   return (
     <Card style={{ marginTop: "12px" }}>
       <div className="ss-analysis-steps">
@@ -49,18 +49,13 @@ function AnalysisProgress({ onDone, steps }) {
     </Card>
   );
 }
-
+ 
 function ScanResultPanel({ result, savedAlready, onSave, onAskCoach, onGoReport, onGoSimulation, guardianMode }) {
-  if (!result || result.riskLevel === "empty") return null;
-  const VerdictIcon = VERDICT_ICON[result.tone] || Info;
-  const hasEntities = result.entities && (result.entities.phones?.length || result.entities.amounts?.length || result.entities.urls?.length);
-  const isAiEnhanced = !!result.aiResult;
-
   const [explainMore, setExplainMore] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedContact, setSelectedContact] = useState(null);
   const [copiedToast, setCopiedToast] = useState(null);
-
+ 
   // Load Safety Circle
   const safetyCircle = useMemo(() => {
     try {
@@ -70,6 +65,11 @@ function ScanResultPanel({ result, savedAlready, onSave, onAskCoach, onGoReport,
       return SAFETY_CIRCLE_SEED;
     }
   }, []);
+ 
+  if (!result || result.riskLevel === "empty") return null;
+  const VerdictIcon = VERDICT_ICON[result.tone] || Info;
+  const hasEntities = result.entities && (result.entities.phones?.length || result.entities.amounts?.length || result.entities.urls?.length);
+  const isAiEnhanced = !!result.aiResult;
 
   // Simplified Text Translation Function
   const getSimplifiedExplanation = () => {
@@ -566,6 +566,7 @@ export default function ScannerPage({
   const [urlContext, setUrlContext] = useState("");
   const [upiId, setUpiId] = useState("");
   const [upiMsg, setUpiMsg] = useState("");
+  const [phoneNum, setPhoneNum] = useState("");
   const [phoneOrg, setPhoneOrg] = useState("");
   const [phoneScript, setPhoneScript] = useState("");
   const [qrFile, setQrFile] = useState(null);
@@ -625,7 +626,7 @@ export default function ScannerPage({
       case "image": return extractedText;
       case "link": return `${url} ${urlContext}`;
       case "upi": return `${upiId} ${upiMsg}`;
-      case "phone": return `${phoneOrg} ${phoneScript}`;
+      case "phone": return `Caller number: ${phoneNum} Organization: ${phoneOrg} Script: ${phoneScript}`;
       case "qr": return qrDecoded;
       default: return "";
     }

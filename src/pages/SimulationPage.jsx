@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   Phone, KeyRound, Briefcase, ChevronRight, ShieldCheck, ShieldX,
-  AlertTriangle, Play, HelpCircle, RefreshCw, Send, CheckCircle2, Lock,
-  Info, CreditCard, Volume2, Users, ArrowRight, ShieldAlert, Award, FileText,
-  Video, Wifi, VolumeX, Maximize2, Mic, QrCode, Camera, X
+  AlertTriangle, HelpCircle, Send, CheckCircle2, Lock,
+  Info, CreditCard, Volume2, Users, ShieldAlert, Award,
+  QrCode, Camera, X
 } from "lucide-react";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import SectionHeading from "../components/SectionHeading";
-import EmptyState from "../components/EmptyState";
 import { ollamaService } from "../services/ollama";
 
 const SCENARIOS = [
@@ -227,7 +226,6 @@ export default function SimulationPage({ onCompleteSimulation, simRepeats, ollam
   const [simulationType, setSimulationType] = useState(null); // null | 'classic' | 'live'
   const [activeScenario, setActiveScenario] = useState(null);
   const [ollamaAvailable, setOllamaAvailable] = useState(false);
-  const [checkingOllama, setCheckingOllama] = useState(true);
 
   // Branching Scenario Engine State
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
@@ -258,15 +256,13 @@ export default function SimulationPage({ onCompleteSimulation, simRepeats, ollam
 
   useEffect(() => {
     // Check if Ollama is running
-    setCheckingOllama(true);
     ollamaService.fetchModels(ollamaHost)
       .then((models) => {
         setOllamaAvailable(models && models.length > 0);
       })
       .catch(() => {
         setOllamaAvailable(false);
-      })
-      .finally(() => setCheckingOllama(false));
+      });
   }, [ollamaHost]);
 
   useEffect(() => {
@@ -289,7 +285,7 @@ export default function SimulationPage({ onCompleteSimulation, simRepeats, ollam
         setTimerIntervalId(null);
       }
     }
-  }, [activeScenario, simulationType, showReport]);
+  }, [activeScenario, simulationType, showReport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatTime = (totalSecs) => {
     const mins = Math.floor(totalSecs / 60);
@@ -410,7 +406,7 @@ export default function SimulationPage({ onCompleteSimulation, simRepeats, ollam
   };
 
   // Triggers completing and saving statistics
-  const handleSimulationEnd = (passed, finalPressure, decisions, exitedAt) => {
+  const handleSimulationEnd = (passed, finalPressure, decisions) => {
     // Generate Resistance Score (out of 100)
     let scoreVal = 100;
     
@@ -694,7 +690,6 @@ export default function SimulationPage({ onCompleteSimulation, simRepeats, ollam
               <div style={{ position: "absolute", top: "14px", left: "20px", right: "20px", height: "3px", background: "var(--surface-border)", zIndex: 0 }} />
               {timelineStages.map((stName, idx) => {
                 const isExit = exitStage === stName;
-                const isCurrent = timelineStages.indexOf(exitStage) === idx;
                 const wasPassed = timelineStages.indexOf(exitStage) > idx || (passed && idx === timelineStages.length - 1);
                 const wasFailed = !passed && isExit;
 

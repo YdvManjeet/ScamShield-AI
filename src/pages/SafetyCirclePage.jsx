@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { 
-  Plus, AlertTriangle, ShieldCheck, Trash2, Edit2, X, Check, Mail, 
-  Phone, MessageSquare, Share2, Info, Lock, AlertCircle, UserPlus 
+  Trash2, Edit2, X, Check, Mail, Phone, Share2, Lock, UserPlus, Users 
 } from "lucide-react";
 import Card from "../components/Card";
-import Badge from "../components/Badge";
 import SectionHeading from "../components/SectionHeading";
 import Toast from "../components/Toast";
+import EmptyState from "../components/EmptyState";
 import { SAFETY_CIRCLE_SEED } from "../services/scamEngine";
-
-export default function SafetyCirclePage({ guardianMode, setGuardianMode }) {
+ 
+export default function SafetyCirclePage() {
   const [members, setMembers] = useState(() => {
     const saved = localStorage.getItem("ss:safety-circle");
     return saved ? JSON.parse(saved) : SAFETY_CIRCLE_SEED;
@@ -118,16 +117,8 @@ export default function SafetyCirclePage({ guardianMode, setGuardianMode }) {
     showToastMsg("Contact details updated.");
   };
 
-  // Demo contacts loader
-  const handleLoadDemos = () => {
-    const demoMembers = [
-      { id: "demo_1", name: "Priya Sharma", relation: "Daughter", phone: "9876543210", email: "priya@family.com", prefMethod: "whatsapp", status: "protected", lastActivity: "Checked a suspicious link 1 day ago — safely ignored" },
-      { id: "demo_2", name: "Ramesh Sharma", relation: "Father", phone: "9812345678", email: "ramesh@family.com", prefMethod: "phone", status: "protected", lastActivity: "Correctly ended a fake bank KYC call yesterday" },
-      { id: "demo_3", name: "Sanjay Patel", relation: "Spouse", phone: "9900998877", email: "sanjay@family.com", prefMethod: "sms", status: "protected", lastActivity: "Scanned a QR refund code — flagged as scam" }
-    ];
-    setMembers(demoMembers);
-    showToastMsg("Hackathon demo contacts loaded successfully.");
-  };
+
+
 
   // Contact Dialog Alerts builder
   const handleCopyAlert = (text) => {
@@ -152,13 +143,6 @@ export default function SafetyCirclePage({ guardianMode, setGuardianMode }) {
       <SectionHeading
         eyebrow="Safety Circle"
         title="Your Trusted Safety Circle"
-        action={
-          <label className="ss-toggle">
-            <input type="checkbox" checked={guardianMode} onChange={(e) => setGuardianMode(e.target.checked)} />
-            <span className="ss-toggle-track"><span className="ss-toggle-thumb" /></span>
-            Guardian Mode
-          </label>
-        }
       />
       
       <p style={{ margin: "-12px 0 6px", fontSize: "14.5px", color: "var(--text-muted)", fontStyle: "italic" }}>
@@ -176,17 +160,7 @@ export default function SafetyCirclePage({ guardianMode, setGuardianMode }) {
         </div>
       </Card>
 
-      {/* Demo helper banner */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: "10px", padding: "10px 14px", fontSize: "13px" }}>
-        <span style={{ color: "var(--text-muted)" }}>Presenting at a hackathon? Load dummy family cards instantly.</span>
-        <button 
-          className="ss-btn-secondary" 
-          onClick={handleLoadDemos}
-          style={{ width: "auto", margin: 0, padding: "5px 12px", fontSize: "12px", minHeight: "auto" }}
-        >
-          Load Hackathon Demos
-        </button>
-      </div>
+
 
       {/* Trusted Contacts Grid */}
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>

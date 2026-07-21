@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, AlertTriangle, Upload, ShieldCheck, Trash2, Camera, Brain, Lock } from "lucide-react";
+import { CheckCircle2, Trash2, Camera, Brain, Lock } from "lucide-react";
 import Card from "../components/Card";
 import SectionHeading from "../components/SectionHeading";
 import Badge from "../components/Badge";
