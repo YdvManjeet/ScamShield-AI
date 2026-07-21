@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Shield, Menu, X, LayoutDashboard, ScanLine, FlaskConical,
-  MessageCircleQuestion, Radar, Users, GraduationCap, Flag, Settings,
-  ShieldAlert, ShieldCheck
+  MessageCircleQuestion, Radar, Users, GraduationCap, Flag, Settings
 } from "lucide-react";
 import { scoreRepository } from "./services/storage";
 import {
@@ -11,8 +10,6 @@ import {
   makeScoreEvent,
   MISSIONS,
   SEED_SCORE_EVENTS,
-  SIMULATION_PASS_SCHEDULE,
-  SIMULATION_FIRST_FAIL_PENALTY,
   SCAN_REWARD_CAP,
   SCAN_REWARD_VALUE,
   mapScamTypeToReportOption
@@ -33,6 +30,7 @@ import LearnPage from "./pages/LearnPage";
 import ReportPage from "./pages/ReportPage";
 import ProfilePage from "./pages/ProfilePage";
 import PrivacyPage from "./pages/PrivacyPage";
+import MissionModal from "./components/MissionModal";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -56,7 +54,7 @@ export default function App() {
   
   // Ollama settings
   const [ollamaHost, setOllamaHost] = useState("/api/ollama");
-  const [ollamaModel, setOllamaModel] = useState("llama3");
+  const [ollamaModel, setOllamaModel] = useState("llama3.2");
 
   // Core metrics
   const [components, setComponents] = useState(null);
@@ -76,6 +74,7 @@ export default function App() {
   const [pendingCoachQuestion, setPendingCoachQuestion] = useState(null);
   const [reportPrefill, setReportPrefill] = useState(null);
   const [hydrated, setHydrated] = useState(false);
+  const [activeMission, setActiveMission] = useState(null);
 
   const activeNavItems = useMemo(() => {
     if (!guardianMode) return NAV_ITEMS;
@@ -190,6 +189,17 @@ export default function App() {
     });
   };
 
+  const handleStartMission = useCallback((id) => {
+    const m = missions.find((item) => item.id === id);
+    if (m) {
+      setActiveMission(m);
+    }
+  }, [missions]);
+
+  const handleResetMissions = useCallback(() => {
+    setMissions((prev) => prev.map((m) => ({ ...m, done: false })));
+  }, []);
+
   const onCompleteSimulation = (scenarioId, passed, scoreVal = 0) => {
     const currentRecord = simRepeats[scenarioId];
     const count = currentRecord && typeof currentRecord === "object"
@@ -261,7 +271,7 @@ export default function App() {
       const org = result.scamType || "an unknown source";
       const score = result.riskScore || 0;
       setPendingCoachQuestion({
-        query: `I analyzed this message and found a ${score}% high-risk pattern. Explain why.`,
+        query: `I analyzed this message claiming to be from ${org} and found a ${score}% risk score. Explain why.`,
         context: {
           scamType: result.scamType,
           riskScore: result.riskScore,
@@ -345,7 +355,7 @@ export default function App() {
         goTo={goTo}
         events={events}
         missions={missions}
-        onStartMission={completeMission}
+        onStartMission={handleStartMission}
         xp={xp}
         streak={streak}
         badges={badges}
@@ -381,9 +391,19 @@ export default function App() {
         userLanguage={language}
       />
     ),
-    radar: <RadarPage />,
-    circle: <SafetyCirclePage guardianMode={guardianMode} setGuardianMode={setGuardianMode} />,
-    learn: <LearnPage missions={missions} onComplete={completeMission} components={components} xp={xp} streak={streak} badges={badges} />,
+    radar: <RadarPage goTo={goTo} />,
+    circle: <SafetyCirclePage />,
+    learn: (
+      <LearnPage
+        missions={missions}
+        onComplete={handleStartMission}
+        onResetMissions={handleResetMissions}
+        components={components}
+        xp={xp}
+        streak={streak}
+        badges={badges}
+      />
+    ),
     report: <ReportPage prefill={reportPrefill} onConsumedPrefill={() => setReportPrefill(null)} />,
     profile: (
       <ProfilePage
@@ -491,40 +511,7 @@ export default function App() {
           <div className="ss-score-chip-num" style={{ fontSize: 15 }}>{score}</div>
         </div>
 
-        {/* Desktop top header toggle bar */}
-        <div 
-          style={{ 
-            display: "flex", 
-            justifyContent: "flex-end", 
-            alignItems: "center", 
-            padding: "16px 34px 0", 
-            gap: "12px" 
-          }} 
-          className="ss-desktop-header-bar"
-        >
-          {guardianMode ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "#FBBF24", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600" }}>
-              <ShieldAlert size={14} />
-              <span>Easy Interface Active</span>
-              <button 
-                onClick={() => setGuardianMode(false)} 
-                className="ss-btn-primary" 
-                style={{ padding: "4px 10px", minHeight: "auto", fontSize: "11px", background: "var(--warning)", color: "black", border: "none", marginLeft: "10px" }}
-              >
-                Switch to Advanced
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setGuardianMode(true)} 
-              className="ss-btn-secondary" 
-              style={{ width: "auto", margin: 0, padding: "6px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}
-            >
-              <ShieldCheck size={14} color="var(--safe-strong)" />
-              Enable Guardian Mode (Easy)
-            </button>
-          )}
-        </div>
+
 
         {/* Content Box */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto" }}>
@@ -550,6 +537,13 @@ export default function App() {
           </footer>
         </div>
       </div>
+      {activeMission && (
+        <MissionModal
+          mission={activeMission}
+          onClose={() => setActiveMission(null)}
+          onComplete={completeMission}
+        />
+      )}
     </div>
   );
 }

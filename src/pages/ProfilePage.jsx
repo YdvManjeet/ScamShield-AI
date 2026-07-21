@@ -45,7 +45,7 @@ export default function ProfilePage({
 
   useEffect(() => {
     testConnection(ollamaHost);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveHost = () => {
     testConnection(hostInput);
@@ -63,7 +63,7 @@ export default function ProfilePage({
           <div className="ss-settings-row">
             <div>
               <div className="ss-card-title">Name</div>
-              <div className="ss-hint">Anjali (Demo Account)</div>
+              <div className="ss-hint">Manjeet Yadav (Demo Account)</div>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import {
-  Phone, CreditCard, QrCode, Package, Zap, Briefcase, KeyRound
+  Phone, QrCode, Package, Zap, Briefcase, KeyRound
 } from "lucide-react";
 
 export const SCORE_WEIGHTS = {
@@ -75,7 +75,7 @@ export const REGION_HEATMAP = [
 ];
 
 export const MISSIONS = [
-  { id: "m1", title: "Spot the fake CBI call", desc: "Learn the 5 things real police never do on a phone call.", minutes: 4, component: "awareness", gain: 3, done: true },
+  { id: "m1", title: "Spot the fake CBI call", desc: "Learn the 5 things real police never do on a phone call.", minutes: 4, component: "awareness", gain: 3, done: false },
   { id: "m2", title: "Secure your UPI app", desc: "Walk through enabling app-lock and transaction alerts.", minutes: 5, component: "paymentSafety", gain: 4, done: false },
   { id: "m3", title: "Digital Arrest simulation", desc: "Live through a simulated 'digital arrest' video call safely.", minutes: 6, component: "simulationPerformance", gain: 6, done: false },
   { id: "m4", title: "Reporting in under 60 seconds", desc: "Practice the exact steps to report on cybercrime.gov.in / 1930.", minutes: 3, component: "responseReadiness", gain: 3, done: false },

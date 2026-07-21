@@ -161,7 +161,6 @@ ${explanationText ? `\n*Scanner details: ${explanationText}*` : ""}`;
 
     if (ollamaOnline) {
       try {
-        const sysPrompt = this.getSystemPrompt(language);
         // We override history to prepend system instruction
         const aiResponse = await ollamaService.chatWithCoach(history, query, language, host, model);
         return {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import {
-  Shield, ShieldCheck, ShieldAlert, ShieldX, Clock, Lock, ChevronRight, Info, AlertTriangle
+  Shield, ShieldCheck, ShieldAlert, Clock, Lock, ChevronRight, Info, AlertTriangle
 } from "lucide-react";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
@@ -155,7 +155,7 @@ function OnboardingAssessment({ onFinish }) {
   );
 }
 
-function OnboardingResults({ profile, responses, breakdown, score, status, onFinish }) {
+function OnboardingResults({ breakdown, score, status, onFinish }) {
   const [revealed, setRevealed] = useState(false);
   React.useEffect(() => {
     const t = setTimeout(() => setRevealed(true), 250);
@@ -220,8 +220,6 @@ export default function OnboardingFlow({ onComplete }) {
   if (step === "assessment") return <OnboardingAssessment onFinish={(r) => { setResponses(r); setStep("results"); }} />;
   return (
     <OnboardingResults
-      profile={profile}
-      responses={responses}
       breakdown={breakdown}
       score={score}
       status={status}

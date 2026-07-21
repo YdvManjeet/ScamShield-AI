@@ -22,7 +22,7 @@ import {
 } from "../services/scamEngine";
 
 const CURRENT_USER = {
-  name: "Anjali",
+  name: "Manjeet Yadav",
   timeOfDay: () => {
     const h = new Date().getHours();
     if (h < 12) return "morning";
@@ -186,7 +186,7 @@ export default function DashboardPage({
                   <div style={{ background: "rgba(59, 130, 246, 0.12)", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "12px", padding: "12px" }}>
                     <MessageSquare size={28} color="var(--accent-strong)" />
                   </div>
-                  <h3 style={{ fontSize: "18px", margin: 0 }}>CHECK A MESSAGE</h3>
+                  <h3 style={{ fontSize: "18px", margin: 0, color: "white" }}>CHECK A MESSAGE</h3>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "14px" }}>Received an SMS, email, or WhatsApp message? Paste it here to verify if it is safe.</p>
               </button>
@@ -201,7 +201,7 @@ export default function DashboardPage({
                   <div style={{ background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "12px", padding: "12px" }}>
                     <PhoneCall size={28} color="var(--warning)" />
                   </div>
-                  <h3 style={{ fontSize: "18px", margin: 0 }}>CHECK A CALL</h3>
+                  <h3 style={{ fontSize: "18px", margin: 0, color: "white" }}>CHECK A CALL</h3>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "14px" }}>Someone is calling you or asking you for money? Check what you should do.</p>
               </button>
@@ -216,7 +216,7 @@ export default function DashboardPage({
                   <div style={{ background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "12px" }}>
                     <QrCode size={28} color="var(--safe-strong)" />
                   </div>
-                  <h3 style={{ fontSize: "18px", margin: 0 }}>CHECK A PAYMENT</h3>
+                  <h3 style={{ fontSize: "18px", margin: 0, color: "white" }}>CHECK A PAYMENT</h3>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "14px" }}>Verify refund requests or QR codes. Check rules before sending money.</p>
               </button>
@@ -231,7 +231,7 @@ export default function DashboardPage({
                   <div style={{ background: "rgba(139, 92, 246, 0.12)", border: "1px solid rgba(139, 92, 246, 0.3)", borderRadius: "12px", padding: "12px" }}>
                     <HelpCircle size={28} color="#A78BFA" />
                   </div>
-                  <h3 style={{ fontSize: "18px", margin: 0 }}>ASK FOR HELP</h3>
+                  <h3 style={{ fontSize: "18px", margin: 0, color: "white" }}>ASK FOR HELP</h3>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "14px" }}>Quick links to call your family members or contact official helpline agencies.</p>
               </button>

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { 
-  MapPin, ShieldAlert, TrendingUp, BarChart2, PieChart as PieIcon, 
-  Layers, Info, ShieldCheck, HelpCircle, Activity 
+  ShieldAlert, BarChart2, PieChart as PieIcon, 
+  Layers, Info, Activity 
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -107,7 +107,7 @@ const WEEKLY_TRENDS = [
   { name: "WFH Tasks", change: 18 }
 ];
 
-export default function RadarPage() {
+export default function RadarPage({ goTo }) {
   const [selectedHotspot, setSelectedHotspot] = useState(HOTSPOTS[0]);
   const [activeTab, setActiveTab] = useState("map"); // 'map' | 'charts' | 'campaigns'
 
@@ -272,7 +272,7 @@ export default function RadarPage() {
                 <h4 style={{ margin: 0, fontSize: "14px" }}>Encountered a similar scam attempt?</h4>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Help update the Scam Radar by logging it.</span>
               </div>
-              <Badge tone="info" style={{ cursor: "pointer" }}>Report Scam</Badge>
+              <Badge tone="info" style={{ cursor: "pointer" }} onClick={() => goTo && goTo("report")}>Report Scam</Badge>
             </Card>
           </div>
         </div>
@@ -322,8 +322,8 @@ export default function RadarPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: 8 }} />
-                  <Legend tickFormatter={(value, entry) => <span style={{ color: "var(--text)", fontSize: 11 }}>{value}</span>} />
+                  <Tooltip contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: 8, color: "#ffffff" }} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                  <Legend formatter={(value) => <span style={{ color: "#ffffff", fontSize: 11 }}>{value}</span>} />
                 </PieChart>
               </ResponsiveContainer>
             </Card>
@@ -339,7 +339,7 @@ export default function RadarPage() {
                 <CartesianGrid stroke="var(--surface-border)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
                 <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: 8 }} />
+                <Tooltip contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--surface-border)", borderRadius: 8, color: "#ffffff" }} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
                 <Bar dataKey="change" radius={[4, 4, 0, 0]}>
                   {WEEKLY_TRENDS.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.change > 0 ? "var(--danger)" : "var(--safe-strong)"} />

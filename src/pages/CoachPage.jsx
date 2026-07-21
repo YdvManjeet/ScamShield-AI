@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Send, MessageCircleQuestion, HelpCircle, Globe, RefreshCw, Trash2, ShieldAlert } from "lucide-react";
+import { Send, Trash2, ShieldAlert } from "lucide-react";
 import Card from "../components/Card";
 import SectionHeading from "../components/SectionHeading";
 import { AIProvider } from "../services/aiProvider";
@@ -83,7 +83,7 @@ export default function CoachPage({
       }
       onConsumedInitial?.();
     }
-  }, [initialQuestion]);
+  }, [initialQuestion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAskCoach = async (query, context = null) => {
     if (!query.trim()) return;

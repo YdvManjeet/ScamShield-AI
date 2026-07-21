@@ -2,6 +2,7 @@ import React from "react";
 import { ShieldCheck, Lock, Users, Server, Database, EyeOff } from "lucide-react";
 import Card from "../components/Card";
 import SectionHeading from "../components/SectionHeading";
+import Badge from "../components/Badge";
 
 export default function PrivacyPage() {
   return (

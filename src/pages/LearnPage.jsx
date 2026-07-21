@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { GraduationCap, CheckCircle2, Clock, Lock, Trophy, ShieldCheck, Award, BookOpen, AlertCircle } from "lucide-react";
+import { GraduationCap, CheckCircle2, Clock, Lock, Trophy, ShieldCheck, BookOpen, AlertCircle } from "lucide-react";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import SectionHeading from "../components/SectionHeading";
@@ -42,6 +42,7 @@ const BADGES_LIST = [
 export default function LearnPage({ 
   missions, 
   onComplete, 
+  onResetMissions,
   components, 
   xp = 0, 
   streak = 3, 
@@ -150,16 +151,23 @@ export default function LearnPage({
         <Card style={{ 
           padding: "24px", 
           textAlign: "center", 
-          background: "rgba(16, 185, 129, 0.04)", 
-          border: "1px solid rgba(16, 185, 129, 0.2)", 
+          background: "rgba(34, 197, 94, 0.03)", 
+          border: "1px dashed var(--safe-strong)", 
           borderRadius: "14px", 
           marginBottom: "24px" 
         }}>
           <CheckCircle2 size={32} color="var(--safe-strong)" style={{ margin: "0 auto 10px" }} />
-          <h3 style={{ margin: 0, fontSize: "18px" }}>All Caught Up!</h3>
-          <p style={{ margin: "4px 0 0", fontSize: "13.5px", color: "var(--text-muted)" }}>
-            You have successfully completed all recommended safety learning missions for today.
+          <h3 style={{ margin: 0, fontSize: "18px" }}>All Completed!</h3>
+          <p style={{ margin: "4px 0 12px", fontSize: "13.5px", color: "var(--text-muted)" }}>
+            You have successfully completed all recommended safety learning missions.
           </p>
+          <button 
+            className="ss-btn-primary" 
+            style={{ width: "auto", margin: "0 auto" }}
+            onClick={onResetMissions}
+          >
+            Reset Progress & Replay
+          </button>
         </Card>
       )}
 
@@ -195,7 +203,18 @@ export default function LearnPage({
       </div>
 
       {/* PROFESSIONAL BADGES DRAWER */}
-      <h3 style={{ fontSize: "16px", margin: "24px 0 12px" }}>Safety Badges & Achievements</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "24px 0 12px" }}>
+        <h3 style={{ fontSize: "16px", margin: 0 }}>Safety Badges & Achievements</h3>
+        {missions && missions.some(m => m.done) && (
+          <button 
+            className="ss-link-btn" 
+            style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0, padding: 0 }}
+            onClick={onResetMissions}
+          >
+            Reset Completed Missions
+          </button>
+        )}
+      </div>
       <div className="ss-grid-3" style={{ gap: "16px" }}>
         {BADGES_LIST.map((b) => {
           const isUnlocked = badges.includes(b.key);
